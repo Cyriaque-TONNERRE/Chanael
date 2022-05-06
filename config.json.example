@@ -1,0 +1,10 @@
+{
+  "BOT_TOKEN": "Le token de votre bot",
+  "GUILD_ID": "L'id de votre serveur",
+  "TICKET_CAT": "L'id de la catégorie où les tickets seront créés",
+  "LOGIN_CAT": "L'id de la catégorie où les salons de 'rename' seront créés",
+  "ROLE_MOD": "L'id du rôle modérateur (pas admin)",
+  "MAIN_ROLE": "L'id du rôle principal qui donne acces au serveur apres le 'rename'",
+  "ONEROLE": ["role1","role2","role3"],
+  "info": "il faut le nom exacte du role, sinon ça marcheras pas"
+}

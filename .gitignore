@@ -1,0 +1,6 @@
+loop.sh
+*.json
+test.js
+!package.json
+/node_modules/
+/.idea/
