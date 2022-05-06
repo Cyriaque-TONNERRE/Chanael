@@ -75,6 +75,10 @@ const commands = [
                     }),
             },
         ],
+    },
+    {
+        name: 'github',
+        description: 'Ouvre le GitHub du bot.',
     }
 ];
 
@@ -312,6 +316,16 @@ bot.on('interactionCreate', async interaction => {
             onerole_db.set(role.value, user.user.id);
             await user.roles.add(role_to_add);
         }
+    }
+    if (interaction.commandName === 'github') {
+        //bouton pour ouvrir le lien github
+        const GithubLink = new MessageActionRow().addComponents(
+            new MessageButton()
+                .setLabel(':heart: Github')
+                .setStyle('LINK')
+                .setUrl('https://github.com/Cyriaque-TONNERRE/Chanael/')
+        );
+        interaction.reply({content: `Ci-dessous le github du bot, n'hésitait si vous trouvez des erreurs et/ou si vous voulez proposez des fonctionnalités **utile**`,component: [GithubLink], ephemeral: true});
     }
 });
 
