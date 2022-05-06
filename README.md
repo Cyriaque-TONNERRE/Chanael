@@ -6,10 +6,11 @@
 * /help
 * /tempmute
 * /ticket
-* New User *À faire : Ajustement des strings + verification*
+* New User
 
 ### À faire :
 * db de sanction
+* /warn
 * auto mute 
 * /1role *commencé*
 * /boutique

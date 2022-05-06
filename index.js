@@ -13,6 +13,30 @@ const constants = require("constants");
 
 const ticket_db = new DataBase('./ticket.json', {});
 const onerole_db = new DataBase('./onerole.json', {});
+const sanction_db = new DataBase('./sanction.json', {});
+
+function addSanction(member, reason, modo, link) {
+    if (link === undefined) {
+        const sanction = {
+            reason: reason,
+            timestamp: Date.now(),
+            modo: modo,
+            link: null
+        }
+    } else {
+        const sanction = {
+            reason: reason,
+            timestamp: Date.now(),
+            modo: modo,
+            link: link,
+        }
+    }
+    if (!sanction_db.has(member.id)) {
+        sanction_db.set(member.id,[sanction]);
+    } else {
+        sanction_db.push(member.id, sanction);
+    }
+}
 
 const commands = [
     {
@@ -256,6 +280,7 @@ bot.on('interactionCreate', async interaction => {
             }
             await user.timeout(duree, raison);
             await interaction.reply(`${user.user.username} a été mute pendant ${parseInt(temps.value)} ${unite}.`);
+            addSanction(user.id, raison, interaction.author.id);
         }
     }
 
