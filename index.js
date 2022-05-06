@@ -16,21 +16,23 @@ const onerole_db = new DataBase('./onerole.json', {});
 const sanction_db = new DataBase('./sanction.json', {});
 
 function addSanction(member, reason, modo, link) {
+    let sanction;
     if (link === undefined) {
-        const sanction = {
+        sanction = {
             reason: reason,
             timestamp: Date.now(),
-            modo: modo,
-            link: null
+            modo: modo.id,
+            link: undefined
         }
     } else {
-        const sanction = {
+        sanction = {
             reason: reason,
             timestamp: Date.now(),
-            modo: modo,
+            modo: modo.id,
             link: link,
         }
     }
+    console.log(member.id);
     if (!sanction_db.has(member.id)) {
         sanction_db.set(member.id,[sanction]);
     } else {
@@ -58,10 +60,42 @@ const commands = [
                 type: ApplicationCommandOptionType.User,
             },
             {
-                name: 'temps',
-                description: 'Temps en (S)econdes / (M)inutes / (H)eures / (J)ours / (W)Semaines.',
+                name: 'durée',
+                description: 'Durée du mute.',
+                required: true,
+                type: ApplicationCommandOptionType.Integer,
+            },
+            {
+                name: 'unité',
+                description: 'Unité de temps. (Max 28 jours / 1 mois)',
                 required: true,
                 type: ApplicationCommandOptionType.String,
+                choices:[
+                    {
+                        name: 'Secondes',
+                        value: 'Secondes',
+                    },
+                    {
+                        name: 'Minutes',
+                        value: 'Minutes',
+                    },
+                    {
+                        name: 'Heures',
+                        value: 'Heures',
+                    },
+                    {
+                        name: 'Jours',
+                        value: 'Jours',
+                    },
+                    {
+                        name: 'Semaines',
+                        value: 'Semaines',
+                    },
+                    {
+                        name: 'Mois',
+                        value: 'Mois',
+                    }
+                ]
             },
             {
                 name: 'raison',
@@ -248,40 +282,34 @@ bot.on('interactionCreate', async interaction => {
 
     if (interaction.commandName === 'tempmute') {
         const pseudo = interaction.options.get('pseudo');
-        const temps = interaction.options.get('temps');
-        const raison = interaction.options.get('raison');
+        const duration = interaction.options.get('durée');
+        const unite = interaction.options.get('unité');
+        const reason = interaction.options.get('raison');
         const user = interaction.guild.members.cache.find(user => user.id === pseudo.value);
-
-        let duree = parseInt(temps.value);
-        let unite = temps.value.toString().slice(-1).toLowerCase();
-
-        if (unite !== 's' && unite !== 'm' && unite !== 'h' && unite !== 'j' && unite !== 'w') {
-            await interaction.reply('Veuillez entrer un temps valide.');
-        }else {
-            if (unite === 's') {
-                duree *= 1000;
-                unite = 'secondes';
-            }
-            if (unite === 'm') {
-                duree *= 1000 * 60;
-                unite = 'minutes';
-            }
-            if (unite === 'h') {
-                duree *= 1000 * 60 * 60;
-                unite = 'heures';
-            }
-            if (unite === 'j') {
-                duree *= 1000 * 60 * 60 * 24;
-                unite = 'jours';
-            }
-            if (unite === 'w') {
-                duree *= 1000 * 60 * 60 * 24 * 7;
-                unite = 'semaines';
-            }
-            await user.timeout(duree, raison);
-            await interaction.reply(`${user.user.username} a été mute pendant ${parseInt(temps.value)} ${unite}.`);
-            addSanction(user.id, raison, interaction.author.id);
+        let timeToMute = duration.value;
+        console.log(unite);
+        if (unite.value === 'Secondes') {
+            timeToMute *= 1000;
         }
+        if (unite.value === 'Minutes') {
+            timeToMute *= 60000;
+        }
+        if (unite.value === 'Heures') {
+            timeToMute *= 3600000;
+        }
+        if (unite.value === 'Jours') {
+            timeToMute *= 86400000;
+        }
+        if (unite.value === 'Semaines') {
+            timeToMute *= 604800000;
+        }
+        if (unite.value === 'Mois') {
+            timeToMute *= 2419200000;
+        }
+        if (timeToMute > 2419200000) { timeToMute = 2419200000; };
+        user.timeout(timeToMute, reason.value);
+        interaction.reply(`${user.displayName} a été mute pendant ${duration.value} ${unite.value}.`);
+        addSanction(user, reason.value, interaction.member);
     }
 
     if (interaction.commandName === 'ticket') {
@@ -346,11 +374,11 @@ bot.on('interactionCreate', async interaction => {
         //bouton pour ouvrir le lien github
         const GithubLink = new MessageActionRow().addComponents(
             new MessageButton()
-                .setLabel(':heart: Github')
+                .setLabel('Github')
                 .setStyle('LINK')
-                .setUrl('https://github.com/Cyriaque-TONNERRE/Chanael/')
+                .setURL('https://github.com/Cyriaque-TONNERRE/Chanael/')
         );
-        interaction.reply({content: `Ci-dessous le github du bot, n'hésitait si vous trouvez des erreurs et/ou si vous voulez proposez des fonctionnalités **utile**`,component: [GithubLink], ephemeral: true});
+        interaction.reply({content: `Ci-dessous le github du bot, n'hésitait si vous trouvez des erreurs et/ou si vous voulez proposez des fonctionnalités **utile**`,components: [GithubLink], ephemeral: true});
     }
 });
 
