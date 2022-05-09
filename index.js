@@ -1,6 +1,9 @@
 const DataBase = require('easy-json-database');
+const latex = require('node-latex');
+const fs = require('fs');
+const pdftoimage = require('node-pdftocairo')
 
-const { Client, Intents, MessageButton, MessageActionRow} = require('discord.js');
+const { Client, Intents, MessageButton, MessageActionRow, MessageEmbed} = require('discord.js');
 const bot = new Client({ intents: "32767"});
 
 const { REST } = require('@discordjs/rest');
@@ -9,7 +12,6 @@ const {ApplicationCommandOptionType} = require("discord-api-types/v10");
 
 
 const config = require('./config.json');
-const constants = require("constants");
 
 const ticket_db = new DataBase('./ticket.json', {});
 const onerole_db = new DataBase('./onerole.json', {});
@@ -137,6 +139,10 @@ const commands = [
     {
         name: 'github',
         description: 'Ouvre le GitHub du bot.',
+    },
+    {
+        name: 'tex',
+        description: 'Affiche une expression écrite en LaTeX.',
     }
 ];
 
@@ -316,7 +322,7 @@ bot.on('interactionCreate', async interaction => {
         const user = interaction.member;
         //créer un channel dans la catégorie 899726058943815731
         if (!ticket_db.has(user.user.id)){
-            const channel = await interaction.guild.channels.create(`ticket-${user.user.username}`, {
+            const channel = await interaction.guild.channels.create(`ticket-${user.displayName}`, {
                 type: 'GUILD_TEXT',
                 parent: config.TICKET_CAT,
             });
@@ -369,6 +375,7 @@ bot.on('interactionCreate', async interaction => {
             onerole_db.set(role.value, user.user.id);
             await user.roles.add(role_to_add);
         }
+        interaction.reply({content: `Le role ${role.value} a bien été attribué à ${user.displayName}.`, ephemeral: true});
     }
     if (interaction.commandName === 'github') {
         //bouton pour ouvrir le lien github
@@ -379,6 +386,71 @@ bot.on('interactionCreate', async interaction => {
                 .setURL('https://github.com/Cyriaque-TONNERRE/Chanael/')
         );
         interaction.reply({content: `Ci-dessous le github du bot, n'hésitait si vous trouvez des erreurs et/ou si vous voulez proposez des fonctionnalités **utile**`,components: [GithubLink], ephemeral: true});
+    }
+    function convertToJpg() {
+
+        const options = {
+            format: 'png',
+            quality: 100,
+
+
+        };
+        const outputBuffer = pdftoimage.input('tex/output.pdf', options).output('tex/output');
+    }
+    const filtre = m => m.author.id === interaction.user.id;
+    if (interaction.commandName === 'tex') {
+        interaction.reply({content: `Vous pouvez envoyer ci-dessous votre code LaTeX, envoyer "option" pour afficher les options LaTeX ou bien "cancel" pour annuler la commande.`, ephemeral: true});
+        //ouvrir un collector pour envoyer le texte
+        const tcollector = interaction.channel.createMessageCollector({filter: filtre, max: 1, timeout: 60000});
+        tcollector.on('collect', async (message) => {
+            console.log(message.content);
+            if (message.content.toLowerCase() === 'option') {
+                message.delete();
+                tcollector.stop();
+                interaction.channel.send({content: '```latex\n' +
+                        '\\documentclass[varwidth=true, border=1pt, convert={size=640x}]{standalone}\n' +
+                        '\\usepackage[utf8]{inputenc}\n' +
+                        '\\usepackage{amsfonts}\n' +
+                        '\\usepackage[dvipsnames]{xcolor}\n' +
+                        '\\definecolor{background}{rgb}{0.212, 0.224, 0.247}\n' +
+                        '\\begin{document}\n' +
+                        '\\pagecolor{background}\n' +
+                        '$VOTRE CODE LaTeX ICI$\n' +
+                        '\\end{document}```', ephemeral: true});
+            } else if (message.content.toLowerCase() === 'cancel') {
+                message.delete();
+                tcollector.stop();
+            } else {
+                const okstring = message.content.replace(/\\/g, '\\\\');
+                tcollector.stop();
+                message.delete();
+                const input = `
+                        \\documentclass[varwidth=true, border=1pt, convert={size=640x}]{standalone}
+                        \\usepackage[utf8]{inputenc}
+                        \\usepackage{amsfonts} 
+                        \\usepackage[dvipsnames]{xcolor}
+                        \\definecolor{background}{rgb}{0.212, 0.224, 0.247}
+                        \\begin{document}
+                        \\pagecolor{background}
+                        $${okstring.value}$
+                        \\end{document}
+                    `;
+                let error;
+                const output = fs.createWriteStream('tex/output.pdf')
+                const pdf = latex(input)
+                pdf.pipe(output)
+                pdf.on('error', err => error = err)
+                pdf.on('finish', () => setTimeout(convertToJpg, 1000))
+                setTimeout(() => {
+                    if (error === undefined) {
+                        interaction.channel.send({files: ['./tex/output-1.png']});
+                    } else {
+                        interaction.channel.send({content: `${error}`, ephemeral: true});
+                    }
+                }, 1000);
+            }
+            }
+        );
     }
 });
 

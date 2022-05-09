@@ -7,12 +7,13 @@
 * /tempmute
 * /ticket
 * New User
+* db de sanction
+* /1role
 
 ### À faire :
-* db de sanction
 * /warn
+* affichage des warns
 * auto mute 
-* /1role *commencé*
 * /boutique
 * économie + /give /take etc...
 * validation du reglement
