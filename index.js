@@ -545,11 +545,23 @@ $${okstring}$
         }
 
         const membre = interaction.options.get('pseudo');
-        const sanctionEmbed = new MessageEmbed()
+        let sanctionEmbed;
+        if (nb_sanction_db.get(membre.user.id) === undefined){
+            sanctionEmbed = new MessageEmbed()
+                .setColor('#3dd583')
+                .setTitle(`Sanctions de ${membre.member.displayName}`)
+                .setThumbnail(membre.user.displayAvatarURL())
+                .addFields({
+                    name: `**Sanction :**`,
+                    value: `Aucune sanction n'a été ajoutée à ce membre. GG`
+                })
+                .setTimestamp()
+                .setFooter({ text: 'Chanael', iconURL: bot.user.displayAvatarURL()});
+        } else {
+            sanctionEmbed = new MessageEmbed()
             .setColor('#3dd583')
             .setTitle(`Sanctions de ${membre.member.displayName}`)
-            .setAuthor({ name: 'Chanael', iconURL: bot.user.displayAvatarURL()})
-            //.setDescription('Some description here')
+            .setDescription(`Rappel du règlement: <#${config.REGLEMENT_CHANNEL}>`)
             .setThumbnail(membre.user.displayAvatarURL())
             .addFields(
                 sanction_db.get(membre.user.id).map(s => {
@@ -558,13 +570,10 @@ $${okstring}$
                         value: `${timestampToDate(s.timestamp)}\n**Par :** ${interaction.guild.members.cache.find(user => user.id === s.modo).displayName}`
                     }
                 })
-                /*{ name: 'Regular field title', value: 'Some value here' },
-                { name: 'Inline field title', value: 'Some value here', inline: true },
-                { name: 'Inline field title', value: 'Some value here', inline: true },*/
             )
             .setTimestamp()
-            .setFooter({ text: `Rappel du réglement : <#${config.REGLEMENT_CHANNEL}>`, iconURL: 'https://pngimg.com/uploads/hitler/hitler_PNG33.png' });
-
+            .setFooter({ text: 'Chanael', iconURL: bot.user.displayAvatarURL()});
+        }
         interaction.reply({embeds: [sanctionEmbed]});
     }
 });

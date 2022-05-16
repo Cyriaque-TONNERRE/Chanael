@@ -9,12 +9,12 @@
 * New User
 * db de sanction
 * /1role
-
-### À faire :
 * /warn
 * affichage des warns
-* auto mute 
+* auto mute
+
+### À faire :
 * /boutique
 * économie + /give /take etc...
-* validation du reglement
 * mise en place de perm pour les commandes
+* validation de cible commande (admin, modo)
