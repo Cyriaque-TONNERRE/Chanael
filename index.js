@@ -16,8 +16,9 @@ const config = require('./config.json');
 const ticket_db = new DataBase('./ticket.json', {});
 const onerole_db = new DataBase('./onerole.json', {});
 const sanction_db = new DataBase('./sanction.json', {});
+const nb_sanction_db = new DataBase('./nb_sanction.json', {});
 
-function addSanction(member, reason, modo, link) {
+function addSanction(member, reason, modo, channel, link) {
     let sanction;
     if (link === undefined) {
         sanction = {
@@ -40,7 +41,37 @@ function addSanction(member, reason, modo, link) {
     } else {
         sanction_db.push(member.id, sanction);
     }
+    if (!nb_sanction_db.has(member.id)) {
+        nb_sanction_db.set(member.id, 1);
+    } else {
+        const nb_sanction_increase = nb_sanction_db.get(member.id) + 1;
+        console.log(nb_sanction_increase);
+        nb_sanction_db.set(member.id, nb_sanction_increase);
+    }
+    automute(member, channel);
 }
+
+function automute(user, channel) {
+    const member = channel.guild.members.cache.get(user.id);
+    const nb_sanction = nb_sanction_db.get(member.id);
+    if (nb_sanction >= 10) {
+        member.timeout(604800000, "Auto-Sanction");
+        channel.send(`${member.displayName} a été réduit au silence 7 jours pour avoir commis ${nb_sanction} infractions au règlement.`);
+    } else if (nb_sanction === 7) {
+        member.timeout(259200000, "Auto-Sanction");
+        channel.send(`${member.displayName} a été réduit au silence 3 jours pour avoir commis 7 infractions au règlement.`);
+    } else if (nb_sanction === 5) {
+        member.timeout(86400000, "Auto-Sanction");
+        channel.send(`${member.displayName} a été réduit au silence 1 jours pour avoir commis 5 infractions au règlement.`);
+    } else if (nb_sanction === 3) {
+        member.timeout(21600000, "Auto-Sanction");
+        channel.send(`${member.displayName} a été réduit au silence 1 heure pour avoir commis 3 infractions au règlement.`);
+    } else {
+        channel.send(`${member.displayName} a commis ${nb_sanction} infractions au règlement.`);
+    }
+}
+
+
 
 const commands = [
     {
@@ -140,9 +171,46 @@ const commands = [
         name: 'github',
         description: 'Ouvre le GitHub du bot.',
     },
-    {
+    /*{
         name: 'tex',
         description: 'Affiche une expression écrite en LaTeX.',
+    },*/
+    {
+        name: 'warn',
+        description: 'Ajoute un avertissement à un utilisateur.',
+        options: [
+            {
+                name: 'pseudo',
+                description: 'Le pseudo de l\'utilisateur.',
+                required: true,
+                type: ApplicationCommandOptionType.User,
+            },
+            {
+                name: 'raison',
+                description: 'Raison de l\'avertissement.',
+                required: true,
+                type: ApplicationCommandOptionType.String,
+            },
+            {
+                name: 'link',
+                description: 'Lien de d\'une preuve.',
+                required: false,
+                type: ApplicationCommandOptionType.String,
+            }
+
+        ],
+    },
+    {
+        name: 'historique',
+        description: 'Affiche la liste des warns d\'un utilisateur.',
+        options: [
+            {
+                name: 'pseudo',
+                description: 'Le pseudo de l\'utilisateur.',
+                required: true,
+                type: ApplicationCommandOptionType.User,
+            },
+        ],
     }
 ];
 
@@ -312,11 +380,11 @@ bot.on('interactionCreate', async interaction => {
         if (unite.value === 'Mois') {
             timeToMute *= 2419200000;
         }
-        if (timeToMute > 2419200000) { timeToMute = 2419200000; };
+        if (timeToMute > 2419200000) { timeToMute = 2419200000; }
         user.timeout(timeToMute, reason.value);
         interaction.reply(`${user.displayName} a été mute pendant ${duration.value} ${unite.value}.`);
-        addSanction(user, reason.value, interaction.member);
-    }
+        addSanction(user, reason.value, interaction.member, interaction.channel);
+    }MessageEmbed
 
     if (interaction.commandName === 'ticket') {
         const user = interaction.member;
@@ -385,18 +453,30 @@ bot.on('interactionCreate', async interaction => {
                 .setStyle('LINK')
                 .setURL('https://github.com/Cyriaque-TONNERRE/Chanael/')
         );
-        interaction.reply({content: `Ci-dessous le github du bot, n'hésitait si vous trouvez des erreurs et/ou si vous voulez proposez des fonctionnalités **utile**`,components: [GithubLink], ephemeral: true});
+        interaction.reply({content: `Ci-dessous le github du bot, n'hésitez pas si vous trouvez des erreurs et/ou si vous voulez proposer des fonctionnalités **utiles**.`,components: [GithubLink], ephemeral: true});
     }
-    function convertToJpg() {
-
+    function convertToPng(error, interaction) {
+        console.log("2");
         const options = {
             format: 'png',
-            quality: 100,
+            resolution: '600',
+            transparent: true,
+            originPageSizes: true,
 
 
         };
-        const outputBuffer = pdftoimage.input('tex/output.pdf', options).output('tex/output');
+        const outputBuffer = pdftoimage.input('tex/output.pdf', options).output('tex/output').then(() => {
+            console.log("3");
+            if (error === undefined) {
+                console.log("4");
+                interaction.channel.send({files: ['./tex/output-1.png']});
+                console.log("5");
+            } else {
+                interaction.channel.send({content: `${error}`, ephemeral: true});
+            }
+        });
     }
+
     const filtre = m => m.author.id === interaction.user.id;
     if (interaction.commandName === 'tex') {
         interaction.reply({content: `Vous pouvez envoyer ci-dessous votre code LaTeX, envoyer "option" pour afficher les options LaTeX ou bien "cancel" pour annuler la commande.`, ephemeral: true});
@@ -405,18 +485,16 @@ bot.on('interactionCreate', async interaction => {
         tcollector.on('collect', async (message) => {
             console.log(message.content);
             if (message.content.toLowerCase() === 'option') {
-                message.delete();
                 tcollector.stop();
-                interaction.channel.send({content: '```latex\n' +
-                        '\\documentclass[varwidth=true, border=1pt, convert={size=640x}]{standalone}\n' +
-                        '\\usepackage[utf8]{inputenc}\n' +
-                        '\\usepackage{amsfonts}\n' +
-                        '\\usepackage[dvipsnames]{xcolor}\n' +
-                        '\\definecolor{background}{rgb}{0.212, 0.224, 0.247}\n' +
-                        '\\begin{document}\n' +
-                        '\\pagecolor{background}\n' +
-                        '$VOTRE CODE LaTeX ICI$\n' +
-                        '\\end{document}```', ephemeral: true});
+                interaction.channel.send(`\`\`\`latex\n
+\\documentclass[varwidth=true, border=1pt, convert={size=640x}]{standalone}
+\\usepackage[utf8]{inputenc}
+\\usepackage{amsfonts}
+\\begin{document}
+$VOTRE CODE LaTeX ICI$
+\\end{document}\`\`\``).then(() => {
+                    message.delete();
+                });
             } else if (message.content.toLowerCase() === 'cancel') {
                 message.delete();
                 tcollector.stop();
@@ -424,33 +502,70 @@ bot.on('interactionCreate', async interaction => {
                 const okstring = message.content.replace(/\\/g, '\\\\');
                 tcollector.stop();
                 message.delete();
-                const input = `
-                        \\documentclass[varwidth=true, border=1pt, convert={size=640x}]{standalone}
-                        \\usepackage[utf8]{inputenc}
-                        \\usepackage{amsfonts} 
-                        \\usepackage[dvipsnames]{xcolor}
-                        \\definecolor{background}{rgb}{0.212, 0.224, 0.247}
-                        \\begin{document}
-                        \\pagecolor{background}
-                        $${okstring.value}$
-                        \\end{document}
-                    `;
+                const input = `\\documentclass[varwidth=true, border=1pt, convert={size=640x}]{standalone}
+\\usepackage[utf8]{inputenc}
+\\usepackage{amsfonts}
+\\begin{document}
+$${okstring}$
+\\end{document}`;
                 let error;
+                console.log(input);
                 const output = fs.createWriteStream('tex/output.pdf')
                 const pdf = latex(input)
                 pdf.pipe(output)
                 pdf.on('error', err => error = err)
-                pdf.on('finish', () => setTimeout(convertToJpg, 1000))
-                setTimeout(() => {
-                    if (error === undefined) {
-                        interaction.channel.send({files: ['./tex/output-1.png']});
-                    } else {
-                        interaction.channel.send({content: `${error}`, ephemeral: true});
+                console.log("1");
+                pdf.on('end', () => setTimeout(convertToPng(error, interaction), 2000));
+
+            }
+        });
+    };
+    if (interaction.commandName === 'warn') {
+        const membre = interaction.options.get('pseudo');
+        const reason = interaction.options.get('raison');
+        const link = interaction.options.get('link');
+        if (link === null) {
+            addSanction(membre.user, reason.value, interaction.member, interaction.channel);
+        } else {
+            addSanction(membre.user, reason.value, interaction.member, interaction.channel, link.value);
+        }
+        interaction.reply({content: `La sanction a bien été ajoutée.`, ephemeral: true});
+    }
+    if (interaction.commandName === 'historique') {
+
+        function timestampToDate (timestamp) {
+            const date = new Date(timestamp);
+            const day = date.getDate();
+            const month = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Aout", "Septembre", "Octobre", "Novembre", "Décembre"];
+            const mois = month[date.getMonth()];
+            const year = date.getFullYear();
+            const hours = date.getHours();
+            const minutes = date.getMinutes();
+            return `Le ${day} ${mois} ${year} à ${hours}:${minutes}`;
+        }
+
+        const membre = interaction.options.get('pseudo');
+        const sanctionEmbed = new MessageEmbed()
+            .setColor('#3dd583')
+            .setTitle(`Sanctions de ${membre.member.displayName}`)
+            .setAuthor({ name: 'Chanael', iconURL: bot.user.displayAvatarURL()})
+            //.setDescription('Some description here')
+            .setThumbnail(membre.user.displayAvatarURL())
+            .addFields(
+                sanction_db.get(membre.user.id).map(s => {
+                    return {//i.imgur.com/AfFp7pu.png
+                        name: `**Sanction pour** : ${s.reason}`,
+                        value: `${timestampToDate(s.timestamp)}\n**Par :** ${interaction.guild.members.cache.find(user => user.id === s.modo).displayName}`
                     }
-                }, 1000);
-            }
-            }
-        );
+                })
+                /*{ name: 'Regular field title', value: 'Some value here' },
+                { name: 'Inline field title', value: 'Some value here', inline: true },
+                { name: 'Inline field title', value: 'Some value here', inline: true },*/
+            )
+            .setTimestamp()
+            .setFooter({ text: `Rappel du réglement : <#${config.REGLEMENT_CHANNEL}>`, iconURL: 'https://pngimg.com/uploads/hitler/hitler_PNG33.png' });
+
+        interaction.reply({embeds: [sanctionEmbed]});
     }
 });
 
