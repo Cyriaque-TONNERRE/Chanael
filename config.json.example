@@ -8,5 +8,6 @@
   "MAIN_ROLE": "L'id du rôle principal qui donne acces au serveur apres le 'rename'",
   "ONEROLE": ["role1","role2","role3"],
   "info": "il faut le nom exacte du role, sinon ça marcheras pas",
-  "REGLEMENT_CHANNEL": "L'id du salon où seront affiché les règles"
+  "REGLEMENT_CHANNEL": "L'id du salon où seront affiché les règles",
+  "BOT_CHANNEL": "L'id du salon où seront affiché les messages du bot (lvl-up, etc)"
 }

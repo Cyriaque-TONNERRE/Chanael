@@ -2,6 +2,7 @@ const DataBase = require('easy-json-database');
 const latex = require('node-latex');
 const fs = require('fs');
 const pdftoimage = require('node-pdftocairo')
+const maths = require('mathjs');
 
 const { Client, Intents, MessageButton, MessageActionRow, MessageEmbed} = require('discord.js');
 const bot = new Client({ intents: "32767"});
@@ -10,13 +11,13 @@ const { REST } = require('@discordjs/rest');
 const { Routes } = require('discord-api-types/v9');
 const {ApplicationCommandOptionType} = require("discord-api-types/v10");
 
-
 const config = require('./config.json');
 
 const ticket_db = new DataBase('./ticket.json', {});
 const onerole_db = new DataBase('./onerole.json', {});
 const sanction_db = new DataBase('./sanction.json', {});
 const nb_sanction_db = new DataBase('./nb_sanction.json', {});
+const xp_db = new DataBase('./xp.json', {});
 
 function addSanction(member, reason, modo, channel, link) {
     let sanction;
@@ -171,10 +172,25 @@ const commands = [
         name: 'github',
         description: 'Ouvre le GitHub du bot.',
     },
-    /*{
+    {
         name: 'tex',
         description: 'Affiche une expression écrite en LaTeX.',
-    },*/
+        options: [
+            {
+                name: 'option',
+                description: 'Les options latex.',
+                required: false,
+                type: ApplicationCommandOptionType.String,
+                choices:
+                   [
+                       {
+                           name: 'true',
+                           value: 'true',
+                       }
+                   ]
+            },
+        ],
+    },
     {
         name: 'warn',
         description: 'Ajoute un avertissement à un utilisateur.',
@@ -455,71 +471,64 @@ bot.on('interactionCreate', async interaction => {
         );
         interaction.reply({content: `Ci-dessous le github du bot, n'hésitez pas si vous trouvez des erreurs et/ou si vous voulez proposer des fonctionnalités **utiles**.`,components: [GithubLink], ephemeral: true});
     }
-    function convertToPng(error, interaction) {
-        console.log("2");
+
+    function sendpng(error, interaction) {
+        if (error === undefined) {
+            interaction.channel.send({files: ['./tex/output-1.png']});
+        } else {
+            interaction.channel.send({content: `${error}`, ephemeral: true});
+        }
+    }
+
+    function convertToPng(interaction) {
         const options = {
             format: 'png',
             resolution: '600',
             transparent: true,
             originPageSizes: true,
-
-
         };
-        const outputBuffer = pdftoimage.input('tex/output.pdf', options).output('tex/output').then(() => {
-            console.log("3");
-            if (error === undefined) {
-                console.log("4");
-                interaction.channel.send({files: ['./tex/output-1.png']});
-                console.log("5");
-            } else {
-                interaction.channel.send({content: `${error}`, ephemeral: true});
-            }
-        });
+        console.log('probleme ici');
+        pdftoimage.input('tex/output.pdf', options).output('tex/output')
     }
 
     const filtre = m => m.author.id === interaction.user.id;
     if (interaction.commandName === 'tex') {
-        interaction.reply({content: `Vous pouvez envoyer ci-dessous votre code LaTeX, envoyer "option" pour afficher les options LaTeX ou bien "cancel" pour annuler la commande.`, ephemeral: true});
-        //ouvrir un collector pour envoyer le texte
-        const tcollector = interaction.channel.createMessageCollector({filter: filtre, max: 1, timeout: 60000});
-        tcollector.on('collect', async (message) => {
-            console.log(message.content);
-            if (message.content.toLowerCase() === 'option') {
-                tcollector.stop();
-                interaction.channel.send(`\`\`\`latex\n
-\\documentclass[varwidth=true, border=1pt, convert={size=640x}]{standalone}
-\\usepackage[utf8]{inputenc}
-\\usepackage{amsfonts}
-\\begin{document}
-$VOTRE CODE LaTeX ICI$
-\\end{document}\`\`\``).then(() => {
-                    message.delete();
-                });
-            } else if (message.content.toLowerCase() === 'cancel') {
+        const option = interaction.options.get('option');
+        if (option !== null) {
+            interaction.channel.send(`\`\`\`latex` +
+                `\\documentclass[varwidth=true, border=1pt, convert={size=640x}]{standalone}` +
+                `\\usepackage[utf8]{inputenc}`+
+                `\\usepackage{amsfonts}` +
+                `\\begin{document}` +
+                `$VOTRE CODE LaTeX ICI$` +
+                `\\end{document}\`\`\``);
+        } else {
+            interaction.reply({content: `Vous pouvez envoyer ci-dessous votre code LaTeX.`, ephemeral: true});
+            let okstring;
+            const tcollector = interaction.channel.createMessageCollector({filter: filtre, max: 1, time: 60000});
+            tcollector.on('collect', (message) => {
+                okstring = message.content.replace(/\\/g, '\\\\');
                 message.delete();
-                tcollector.stop();
-            } else {
-                const okstring = message.content.replace(/\\/g, '\\\\');
-                tcollector.stop();
-                message.delete();
-                const input = `\\documentclass[varwidth=true, border=1pt, convert={size=640x}]{standalone}
-\\usepackage[utf8]{inputenc}
-\\usepackage{amsfonts}
-\\begin{document}
-$${okstring}$
-\\end{document}`;
-                let error;
-                console.log(input);
-                const output = fs.createWriteStream('tex/output.pdf')
-                const pdf = latex(input)
-                pdf.pipe(output)
-                pdf.on('error', err => error = err)
-                console.log("1");
-                pdf.on('end', () => setTimeout(convertToPng(error, interaction), 2000));
-
-            }
-        });
-    };
+            })
+            tcollector.on('end', (collected) => {
+                if(collected.size === 0){
+                    interaction.editReply({content: `Commande annulée, vous n'avez pas envoyé de code LaTeX.`, ephemeral: true});
+                } else {
+                    const input = `\\documentclass[varwidth=true, border=1pt, convert={size=640x}]{standalone}` +
+                        `\\usepackage[utf8]{inputenc}` +
+                        `\\usepackage{amsfonts}` +
+                        `\\begin{document}` +
+                        `$${okstring}$` +
+                        `\\end{document}`;
+                    const output = fs.createWriteStream('tex/output.pdf')
+                    const pdf = latex(input)
+                    pdf.pipe(output)
+                    pdf.on('error', err => interaction.editReply(err));
+                    pdf.on('finish', () => convertToPng(interaction));
+                }
+            });
+        }
+    }
     if (interaction.commandName === 'warn') {
         const membre = interaction.options.get('pseudo');
         const reason = interaction.options.get('raison');
@@ -529,7 +538,17 @@ $${okstring}$
         } else {
             addSanction(membre.user, reason.value, interaction.member, interaction.channel, link.value);
         }
-        interaction.reply({content: `La sanction a bien été ajoutée.`, ephemeral: true});
+        const sanctionEmbed = new MessageEmbed()
+            .setColor('#da461a')
+            .setTitle(`${membre.member.displayName} à été sanctionné par ${interaction.member.displayName}`)
+            .setThumbnail(membre.user.displayAvatarURL())
+            .addFields({
+                name: `Raison :`,
+                value: `${reason.value}`,
+            })
+            .setTimestamp()
+            .setFooter({ text: 'Chanael', iconURL: bot.user.displayAvatarURL()});
+        interaction.reply({embeds: [sanctionEmbed]});
     }
     if (interaction.commandName === 'historique') {
 
@@ -561,7 +580,6 @@ $${okstring}$
             sanctionEmbed = new MessageEmbed()
             .setColor('#3dd583')
             .setTitle(`Sanctions de ${membre.member.displayName}`)
-            .setDescription(`Rappel du règlement: <#${config.REGLEMENT_CHANNEL}>`)
             .setThumbnail(membre.user.displayAvatarURL())
             .addFields(
                 sanction_db.get(membre.user.id).map(s => {
@@ -603,5 +621,43 @@ bot.on('ready', () => {
     console.log(`Logged in as ${bot.user.tag}`);
     console.log(`ID: ${bot.user.id}`);
 });
+
+function lvl_up(message){
+    let xp = xp_db.get(message.author.id).xp;
+    let lvl = xp_db.get(message.author.id).level;
+    let channel = message.guild.channels.cache.find(channel => channel.id === config.BOT_CHANNEL);
+    const size = 100;
+    console.log(xp_db.get(message.author.id));
+    if (xp >= maths.round(size*(1.3**lvl))) {
+        let lvlupEmbed = new MessageEmbed()
+            .setColor('#0162b0')
+            .setTitle(`Bravo ${message.author.username} !`)
+            .setThumbnail(message.author.displayAvatarURL())
+            .setDescription(`Vous avez atteint le niveau ${lvl+1} !`)
+            .setTimestamp()
+            .setFooter({ text: 'Chanael', iconURL: bot.user.displayAvatarURL()});
+        xp_db.set(message.author.id, {xp: xp - maths.round(size*(1.3**lvl)), level: lvl + 1, timestamp: Date.now()});
+        console.log("whut");
+        channel.send({content:`Bravo <@${message.author.id}>, tu viens de monter d'un niveau`, embeds: [lvlupEmbed]});
+    }
+}
+
+bot.on('messageCreate', (message) => {
+    if (message.author.id !== bot.user.id) {
+        if (!xp_db.has(message.author.id)){
+            let User = {};
+            User.xp = 0;
+            User.level = 0;
+            User.timestamp = Date.now();
+            xp_db.set(message.author.id, User);
+        } else {
+            if (xp_db.get(message.author.id).timestamp + 1000 < Date.now()){
+                xp_db.set(message.author.id, {xp: xp_db.get(message.author.id).xp + maths.round(maths.random(3,12)), level: xp_db.get(message.author.id).level, timestamp: Date.now()});
+                lvl_up(message);
+            }
+        }
+    }
+});
+
 
 bot.login(config.BOT_TOKEN);
