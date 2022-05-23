@@ -4,7 +4,7 @@ const fs = require('fs');
 const pdftoimage = require('node-pdftocairo')
 const maths = require('mathjs');
 
-const { Client, Intents, MessageButton, MessageActionRow, MessageEmbed} = require('discord.js');
+const { Client, MessageButton, MessageActionRow, MessageEmbed} = require('discord.js');
 const bot = new Client({ intents: "32767"});
 
 const { REST } = require('@discordjs/rest');
@@ -259,7 +259,7 @@ function fcollector(channel,member) {
     collector.on('collect', m => {
         toReturn = m.content;
     });
-    collector.on('end', collected => {
+    collector.on('end', () => {
         console.log(toReturn);
         if (toReturn.match(regex)[0].length !== toReturn.length) {
             console.log("No match");
@@ -282,7 +282,7 @@ function fcollector2(channel, member) {
     collector.on('collect', m => {
         toReturn = m.content;
     });
-    collector.on('end', collected => {
+    collector.on('end', () => {
         console.log(toReturn);
         if (toReturn.match(regex)[0].length !== toReturn.length) {
             console.log("No match");
@@ -327,7 +327,7 @@ bot.on('interactionCreate', interaction => {
 // Connection des nouveaux membres
 
 bot.on('guildMemberAdd',  member => {
-    const channel_ = member.guild.channels.create(`${member.displayName}`, {
+    member.guild.channels.create(`${member.displayName}`, {
         type: 'GUILD_TEXT',
         parent: config.LOGIN_CAT,
         permissionOverwrites: [
@@ -471,16 +471,7 @@ bot.on('interactionCreate', async interaction => {
         );
         interaction.reply({content: `Ci-dessous le github du bot, n'hésitez pas si vous trouvez des erreurs et/ou si vous voulez proposer des fonctionnalités **utiles**.`,components: [GithubLink], ephemeral: true});
     }
-
-    function sendpng(error, interaction) {
-        if (error === undefined) {
-            interaction.channel.send({files: ['./tex/output-1.png']});
-        } else {
-            interaction.channel.send({content: `${error}`, ephemeral: true});
-        }
-    }
-
-    function convertToPng(interaction) {
+    function convertToPng() {
         const options = {
             format: 'png',
             resolution: '600',
@@ -524,7 +515,7 @@ bot.on('interactionCreate', async interaction => {
                     const pdf = latex(input)
                     pdf.pipe(output)
                     pdf.on('error', err => interaction.editReply(err));
-                    pdf.on('finish', () => convertToPng(interaction));
+                    pdf.on('finish', () => convertToPng());
                 }
             });
         }
