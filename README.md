@@ -15,7 +15,7 @@
 * system xp
 
 ### À faire :
-* /boutique
+* /shop
 * économie + /give /take etc...
 * mise en place de perm pour les commandes
 * validation de cible commande (admin, modo)
