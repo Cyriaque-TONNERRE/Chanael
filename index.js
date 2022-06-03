@@ -227,6 +227,10 @@ const commands = [
                 type: ApplicationCommandOptionType.User,
             },
         ],
+    },
+    {
+        name: 'xp',
+        description: 'Affiche les xp de l\'utilisateur.',
     }
 ];
 
