@@ -14,6 +14,7 @@ const {ApplicationCommandOptionType} = require("discord-api-types/v10");
 const config = require('./config.json');
 
 const ticket_db = new DataBase('./ticket.json', {});
+const admin_ticket_db = new DataBase('./admin_ticket.json', {});
 const onerole_db = new DataBase('./onerole.json', {});
 const sanction_db = new DataBase('./sanction.json', {});
 const nb_sanction_db = new DataBase('./nb_sanction.json', {});
@@ -50,6 +51,15 @@ function addSanction(member, reason, modo, channel, link) {
         nb_sanction_db.set(member.id, nb_sanction_increase);
     }
     automute(member, channel);
+}
+
+async function verificationpermission(interaction) {
+    if (interaction.member.roles.cache.has(config.ROLE_MOD) || interaction.member.roles.cache.has(config.ROLE_ADMIN)) {
+        return true;
+    } else {
+        interaction.reply({content :"Vous n'avez pas la permission d'utiliser cette commande.", ephemeral: true});
+        return false;
+    }
 }
 
 function automute(user, channel) {
@@ -101,14 +111,10 @@ const commands = [
             },
             {
                 name: 'unité',
-                description: 'Unité de temps. (Max 28 jours / 1 mois)',
+                description: 'Unité de temps. (Max 28 jours / 4 semaines)',
                 required: true,
                 type: ApplicationCommandOptionType.String,
                 choices:[
-                    {
-                        name: 'Secondes',
-                        value: 'Secondes',
-                    },
                     {
                         name: 'Minutes',
                         value: 'Minutes',
@@ -124,10 +130,6 @@ const commands = [
                     {
                         name: 'Semaines',
                         value: 'Semaines',
-                    },
-                    {
-                        name: 'Mois',
-                        value: 'Mois',
                     }
                 ]
             },
@@ -142,6 +144,18 @@ const commands = [
     {
         name: 'ticket',
         description: 'Créer un ticket.',
+    },
+    {
+        name: 'adminticket',
+        description: `Force l'ouverture d'un ticket avec un utilisateur.`,
+        options: [
+            {
+                name: 'pseudo',
+                description: 'Le pseudo de l\'utilisateur à ouvrir le ticket.',
+                required: true,
+                type: ApplicationCommandOptionType.User,
+            }
+        ]
     },
     {
         name: '1role',
@@ -171,7 +185,7 @@ const commands = [
     {
         name: 'github',
         description: 'Ouvre le GitHub du bot.',
-    },
+    },/*
     {
         name: 'tex',
         description: 'Affiche une expression écrite en LaTeX.',
@@ -190,7 +204,7 @@ const commands = [
                    ]
             },
         ],
-    },
+    },*/
     {
         name: 'warn',
         description: 'Ajoute un avertissement à un utilisateur.',
@@ -317,8 +331,11 @@ function fcollector2(channel, member) {
 bot.on('interactionCreate', interaction => {
     if (!interaction.isButton()) return;
     if (interaction.customId === `validate`) {
-        interaction.member.roles.add(interaction.guild.roles.cache.find(role => role.id === config.MAIN_ROLE));
+        //interaction.member.roles.add(interaction.guild.roles.cache.find(role => role.id === config.MAIN_ROLE));
         interaction.member.setNickname(`${prenom} ${nom}`);
+        interaction.guild.channels.cache.find(channel => channel.id === config.REGLEMENT_CHANNEL).permissionOverwrites.create(interaction.member.id, {
+            VIEW_CHANNEL: true,
+        });
         interaction.channel.delete();
     }
 
@@ -356,7 +373,7 @@ bot.on('guildMemberAdd',  member => {
             READ_MESSAGE_HISTORY: true,
         });
         channel.send(`Bienvenue <@${member.id}> sur le serveur de la Promo67 !`);
-        channel.send(`Attention à bien remplir ce formulaire, les informations données ne pourront être modifié que par un modérateur.`);
+        channel.send(`Attention à bien remplir ce formulaire, les informations données ne pourront être modifiées que par un modérateur.`);
         //demander le nom / prénom
         channel.send(`Quel est ton Prénom ?`);
         fcollector(channel,member);
@@ -375,36 +392,44 @@ bot.on('interactionCreate', async interaction => {
     }
 
     if (interaction.commandName === 'tempmute') {
-        const pseudo = interaction.options.get('pseudo');
-        const duration = interaction.options.get('durée');
-        const unite = interaction.options.get('unité');
-        const reason = interaction.options.get('raison');
-        const user = interaction.guild.members.cache.find(user => user.id === pseudo.value);
-        let timeToMute = duration.value;
-        console.log(unite);
-        if (unite.value === 'Secondes') {
-            timeToMute *= 1000;
-        }
-        if (unite.value === 'Minutes') {
-            timeToMute *= 60000;
-        }
-        if (unite.value === 'Heures') {
-            timeToMute *= 3600000;
-        }
-        if (unite.value === 'Jours') {
-            timeToMute *= 86400000;
-        }
-        if (unite.value === 'Semaines') {
-            timeToMute *= 604800000;
-        }
-        if (unite.value === 'Mois') {
-            timeToMute *= 2419200000;
-        }
-        if (timeToMute > 2419200000) { timeToMute = 2419200000; }
-        user.timeout(timeToMute, reason.value);
-        interaction.reply(`${user.displayName} a été mute pendant ${duration.value} ${unite.value}.`);
-        addSanction(user, reason.value, interaction.member, interaction.channel);
-    }MessageEmbed
+        verificationpermission(interaction).then(result => {
+            if (result) {
+                const pseudo = interaction.options.get('pseudo');
+                if (pseudo.member.roles.cache.find(role => role.id === config.ROLE_MOD) || pseudo.member.roles.cache.find(role => role.id === config.ROLE_ADMIN) || pseudo.member.permissions.has('ADMINISTRATOR')) {
+                    interaction.reply({content:`Vous ne pouvez pas mute un modérateur ou un administrateur.`, ephemeral: true});
+                } else {
+                    const duration = interaction.options.get('durée');
+                    const unite = interaction.options.get('unité');
+                    const reason = interaction.options.get('raison');
+                    const user = interaction.guild.members.cache.find(user => user.id === pseudo.value);
+                    let timeToMute = duration.value;
+                    console.log(unite);
+                    if (unite.value === 'Minutes') {
+                        timeToMute *= 60000;
+                    }
+                    if (unite.value === 'Heures') {
+                        timeToMute *= 3600000;
+                    }
+                    if (unite.value === 'Jours') {
+                        timeToMute *= 86400000;
+                    }
+                    if (unite.value === 'Semaines') {
+                        timeToMute *= 604800000;
+                    }
+                    if (timeToMute > 2419200000) {
+                        timeToMute = 2419200000;
+                        user.timeout(timeToMute, reason.value);
+                        interaction.reply(`${user.displayName} a été mute pendant 1 mois (durée max).`);
+                        addSanction(user, reason.value, interaction.member, interaction.channel);
+                    } else {
+                        user.timeout(timeToMute, reason.value);
+                        interaction.reply(`${user.displayName} a été mute pendant ${duration.value} ${unite.value}.`);
+                        addSanction(user, reason.value, interaction.member, interaction.channel);
+                    }
+                }
+            }
+        });
+    }
 
     if (interaction.commandName === 'ticket') {
         const user = interaction.member;
@@ -447,23 +472,74 @@ bot.on('interactionCreate', async interaction => {
             interaction.reply({content: 'Vous avez déjà un ticket ouvert.', ephemeral: true});
         }
     }
+
+    if (interaction.commandName === 'adminticket') {
+        verificationpermission(interaction).then(result => {
+            if (result) {
+                const pseudo = interaction.options.get('pseudo');
+                if (!admin_ticket_db.has(pseudo.user.id)){
+                    const channel = interaction.guild.channels.create(`admin-ticket-${pseudo.member.displayName}`, {
+                        type: 'GUILD_TEXT',
+                        parent: config.TICKET_CAT,
+                    }).then(channel => {
+                        ticket_db.set(channel.id, pseudo.user.id);
+                        ticket_db.set(pseudo.user.id, true);
+                        interaction.reply({content: `Votre ticket a bien été créé.`, ephemeral: true});
+                        //donner la permission de lecture et d'écriture de user
+                        channel.permissionOverwrites.create(pseudo.user, {
+                            VIEW_CHANNEL: true,
+                            SEND_MESSAGES: true,
+                            EMBED_LINKS: true,
+                            ATTACH_FILES: true,
+                            READ_MESSAGE_HISTORY: true,
+                        });
+                        //donner la permission de lecture et d'écriture aux modérateurs
+                        channel.permissionOverwrites.create(interaction.guild.roles.cache.find(role => role.id === config.ROLE_MOD), {
+                            VIEW_CHANNEL: true,
+                            SEND_MESSAGES: true,
+                            EMBED_LINKS: true,
+                            ATTACH_FILES: true,
+                            READ_MESSAGE_HISTORY: true,
+                            MANAGE_CHANNELS: true,
+                        });
+                        //creer un bouton dans le channel pour le supprimer
+                        const row = new MessageActionRow().addComponents(
+                            new MessageButton()
+                                .setCustomId('end_ticket')
+                                .setLabel('Fermer le ticket')
+                                .setStyle('DANGER')
+                        );
+                        channel.send({content: `Bienvenue <@${pseudo.user.id}> dans le ticket de <@${interaction.user.id}>.` ,components: [row]});
+
+                    });
+                }else{
+                    interaction.reply({content: 'Vous avez déjà un admin-ticket ouvert.', ephemeral: true});
+                }
+            }
+        })
+    }
+
     if (interaction.commandName === '1role') {
-        const pseudo = interaction.options.get('pseudo');
-        const role = interaction.options.get('role');
-        const user = interaction.guild.members.cache.find(user => user.id === pseudo.value);
-        const role_to_add = interaction.guild.roles.cache.find(AddRole => AddRole.name === role.value);
-        let target;
-        // supprimer le role à tout ceux qui ont le role
-        if (onerole_db.has(role.value)) {
-            target = interaction.guild.members.cache.find(user => user.id === onerole_db.get(role.value));
-            await target.roles.remove(role_to_add);
-            onerole_db.set(role.value, user.user.id);
-            await user.roles.add(role_to_add);
-        } else {
-            onerole_db.set(role.value, user.user.id);
-            await user.roles.add(role_to_add);
-        }
-        interaction.reply({content: `Le role ${role.value} a bien été attribué à ${user.displayName}.`, ephemeral: true});
+        verificationpermission(interaction).then(result => {
+            if (result) {
+                const pseudo = interaction.options.get('pseudo');
+                const role = interaction.options.get('role');
+                const user = interaction.guild.members.cache.find(user => user.id === pseudo.value);
+                const role_to_add = interaction.guild.roles.cache.find(AddRole => AddRole.name === role.value);
+                let target;
+                // supprimer le role à tout ceux qui ont le role
+                if (onerole_db.has(role.value)) {
+                    target = interaction.guild.members.cache.find(user => user.id === onerole_db.get(role.value));
+                    target.roles.remove(role_to_add);
+                    onerole_db.set(role.value, user.user.id);
+                    user.roles.add(role_to_add);
+                } else {
+                    onerole_db.set(role.value, user.user.id);
+                    user.roles.add(role_to_add);
+                }
+                interaction.reply({content: `Le role ${role.value} a bien été attribué à ${user.displayName}.`, ephemeral: true});
+            }
+        })
     }
     if (interaction.commandName === 'github') {
         //bouton pour ouvrir le lien github
@@ -525,25 +601,33 @@ bot.on('interactionCreate', async interaction => {
         }
     }
     if (interaction.commandName === 'warn') {
-        const membre = interaction.options.get('pseudo');
-        const reason = interaction.options.get('raison');
-        const link = interaction.options.get('link');
-        if (link === null) {
-            addSanction(membre.user, reason.value, interaction.member, interaction.channel);
-        } else {
-            addSanction(membre.user, reason.value, interaction.member, interaction.channel, link.value);
-        }
-        const sanctionEmbed = new MessageEmbed()
-            .setColor('#da461a')
-            .setTitle(`${membre.member.displayName} à été sanctionné par ${interaction.member.displayName}`)
-            .setThumbnail(membre.user.displayAvatarURL())
-            .addFields({
-                name: `Raison :`,
-                value: `${reason.value}`,
-            })
-            .setTimestamp()
-            .setFooter({ text: 'Chanael', iconURL: bot.user.displayAvatarURL()});
-        interaction.reply({embeds: [sanctionEmbed]});
+        verificationpermission(interaction).then(result => {
+            if (result) {
+                const membre = interaction.options.get('pseudo');
+                if (membre.member.roles.cache.find(role => role.id === config.ROLE_MOD) || membre.member.roles.cache.find(role => role.id === config.ROLE_ADMIN) || membre.member.permissions.has('ADMINISTRATOR')) {
+                    interaction.reply({content:`Vous ne pouvez pas mute un modérateur ou un administrateur.`, ephemeral: true});
+                } else {
+                    const reason = interaction.options.get('raison');
+                    const link = interaction.options.get('link');
+                    if (link === null) {
+                        addSanction(membre.user, reason.value, interaction.member, interaction.channel);
+                    } else {
+                        addSanction(membre.user, reason.value, interaction.member, interaction.channel, link.value);
+                    }
+                    const sanctionEmbed = new MessageEmbed()
+                        .setColor('#da461a')
+                        .setTitle(`${membre.member.displayName} à été sanctionné par ${interaction.member.displayName}`)
+                        .setThumbnail(membre.user.displayAvatarURL())
+                        .addFields({
+                            name: `Raison :`,
+                            value: `${reason.value}`,
+                        })
+                        .setTimestamp()
+                        .setFooter({text: 'Chanael', iconURL: bot.user.displayAvatarURL()});
+                    interaction.reply({embeds: [sanctionEmbed]});
+                }
+            }
+        })
     }
     if (interaction.commandName === 'historique') {
 
@@ -596,8 +680,14 @@ bot.on('interactionCreate', interaction => {
     if (interaction.customId === `end_ticket`){
         if(interaction.member.roles.cache.some((role) => role.id === config.ROLE_MOD) || interaction.member.permissions.has("ADMINISTRATOR")){
             interaction.channel.delete();
-            ticket_db.delete(ticket_db.get(interaction.channel.id));
-            ticket_db.delete(interaction.channel.id);
+            if (ticket_db.has(interaction.channel.id)){
+                ticket_db.delete(ticket_db.get(interaction.channel.id));
+                ticket_db.delete(interaction.channel.id);
+            }
+            if (admin_ticket_db.has(interaction.channel.id)){
+                admin_ticket_db.delete(admin_ticket_db.get(interaction.channel.id));
+                admin_ticket_db.delete(interaction.channel.id);
+            }
         } else {
             interaction.reply({content: 'Vous n\'avez pas la permission de faire cela.', ephemeral: true});
         }
@@ -608,6 +698,10 @@ bot.on('channelDelete', channel => {
     if (ticket_db.has(channel.id)) {
         ticket_db.delete(ticket_db.get(channel.id));
         ticket_db.delete(channel.id);
+    }
+    if (admin_ticket_db.has(channel.id)) {
+        admin_ticket_db.delete(admin_ticket_db.get(channel.id));
+        admin_ticket_db.delete(channel.id);
     }
 })
 
@@ -621,12 +715,13 @@ function lvl_up(message){
     let xp = xp_db.get(message.author.id).xp;
     let lvl = xp_db.get(message.author.id).level;
     let channel = message.guild.channels.cache.find(channel => channel.id === config.BOT_CHANNEL);
+    let name = message.guild.members.cache.find(user => user.id === message.author.id).displayName;
     const size = 100;
     console.log(xp_db.get(message.author.id));
     if (xp >= maths.round(size*(1.3**lvl))) {
         let lvlupEmbed = new MessageEmbed()
             .setColor('#0162b0')
-            .setTitle(`Bravo ${message.author.username} !`)
+            .setTitle(`Bravo ${name} !`)
             .setThumbnail(message.author.displayAvatarURL())
             .setDescription(`Vous avez atteint le niveau ${lvl+1} !`)
             .setTimestamp()
@@ -636,7 +731,7 @@ function lvl_up(message){
         channel.send({content:`Bravo <@${message.author.id}>, tu viens de monter d'un niveau`, embeds: [lvlupEmbed]});
     }
 }
-
+/*
 bot.on('messageCreate', (message) => {
     if (message.author.id !== bot.user.id) {
         if (!xp_db.has(message.author.id)){
@@ -653,6 +748,6 @@ bot.on('messageCreate', (message) => {
         }
     }
 });
-
+*/
 
 bot.login(config.BOT_TOKEN);
