@@ -3,6 +3,7 @@ const latex = require('node-latex');
 const fs = require('fs');
 const pdftoimage = require('node-pdftocairo')
 const maths = require('mathjs');
+const cron = require('node-cron');
 
 const { Client, MessageButton, MessageActionRow, MessageEmbed} = require('discord.js');
 const bot = new Client({ intents: "32767"});
@@ -12,7 +13,7 @@ const { Routes } = require('discord-api-types/v9');
 const {ApplicationCommandOptionType} = require("discord-api-types/v10");
 
 const config = require('./config.json');
-const {random, forEach, randomInt} = require("mathjs");
+const {randomInt, forEach} = require("mathjs");
 
 const ticket_db = new DataBase('./ticket.json', {});
 const admin_ticket_db = new DataBase('./admin_ticket.json', {});
@@ -20,6 +21,7 @@ const onerole_db = new DataBase('./onerole.json', {});
 const sanction_db = new DataBase('./sanction.json', {});
 const nb_sanction_db = new DataBase('./nb_sanction.json', {});
 const xp_db = new DataBase('./xp.json', {});
+const bday_db = new DataBase('./bday.json', {});
 
 function addSanction(member, reason, modo, channel, link) {
     let sanction;
@@ -250,6 +252,27 @@ const commands = [
     {
         name: 'reload-reglement',
         description: 'Reload la validation du règlement.',
+    },
+    {
+        name: 'setanniv',
+        description: `Permet de régler la date de votre anniversaire. (/!\\ faisable qu'une fois)`,
+        options: [
+            {
+                name: 'jour',
+                description: 'Jour de l\'anniversaire.',
+                required: true,
+                type: ApplicationCommandOptionType.Integer,
+            },
+            {
+                name: 'mois',
+                description: 'Mois de l\'anniversaire.',
+                required: true,
+                type: ApplicationCommandOptionType.Integer,
+                choices: [
+                    {name: 'Janvier', value: 1},{name: 'Février', value: 2},{name: 'Mars', value: 3},{name: 'Avril', value: 4},{name: 'Mai', value: 5},{name: 'Juin', value: 6},{name: 'Juillet', value: 7},{name: 'Août', value: 8},{name: 'Septembre', value: 9},{name: 'Octobre', value: 10},{name: 'Novembre', value: 11},{name: 'Décembre', value: 12}
+                ]
+            }
+        ]
     }
 ];
 
@@ -446,7 +469,7 @@ bot.on('interactionCreate', async interaction => {
             ticket_db.set(channel.id, user.user.id);
             ticket_db.set(user.user.id, true);
             interaction.reply({content: `Votre ticket a bien été créé.`, ephemeral: true});
-            //donner la permission de lecture et d'écruture de user
+            //donner la permission de lecture et d'écriture de user
             await channel.permissionOverwrites.create(interaction.user, {
                 VIEW_CHANNEL: true,
                 SEND_MESSAGES: true,
@@ -455,7 +478,7 @@ bot.on('interactionCreate', async interaction => {
                 READ_MESSAGE_HISTORY: true,
                 MANAGE_CHANNELS: true,
             });
-            //donner la permission de lecture et d'écruture aux modérateurs
+            //donner la permission de lecture et d'écriture aux modérateurs
             await channel.permissionOverwrites.create(interaction.guild.roles.cache.find(role => role.id === config.ROLE_MOD), {
                 VIEW_CHANNEL: true,
                 SEND_MESSAGES: true,
@@ -531,7 +554,7 @@ bot.on('interactionCreate', async interaction => {
                 const user = interaction.guild.members.cache.find(user => user.id === pseudo.value);
                 const role_to_add = interaction.guild.roles.cache.find(AddRole => AddRole.name === role.value);
                 let target;
-                // supprimer le role à tout ceux qui ont le role
+                // supprimer le role à tous ceux qui ont le role
                 if (onerole_db.has(role.value)) {
                     target = interaction.guild.members.cache.find(user => user.id === onerole_db.get(role.value));
                     target.roles.remove(role_to_add);
@@ -562,7 +585,7 @@ bot.on('interactionCreate', async interaction => {
             transparent: true,
             originPageSizes: true,
         };
-        console.log('probleme ici');
+        console.log('problème ici');
         pdftoimage.input('tex/output.pdf', options).output('tex/output')
     }
 
@@ -699,6 +722,20 @@ bot.on('interactionCreate', async interaction => {
             }
         })
     }
+    if (interaction.commandName === 'setanniv') {
+        if (bday_db.has(interaction.member.id)) {
+            interaction.reply({content: `Votre anniversaire est deja régler, si il y a un problème ➡️  contactez un modérateur.`, ephemeral: true});
+        } else {
+            const jour = interaction.options.get('jour');
+            if (jour.value < 1 || jour.value > 31) {
+                interaction.reply({content: `Veuillez entrer un jour valide (1-31).`, ephemeral: true});
+            } else {
+                const mois = interaction.options.get('mois');
+                bday_db.set(interaction.member.id, {jour: jour.value, mois: mois.value});
+                interaction.reply({content: `Votre anniversaire a bien été régler.`, ephemeral: true});
+            }
+        }
+    }
 });
 
 bot.on('interactionCreate', interaction => {
@@ -760,6 +797,28 @@ bot.on('ready', () => {
     console.log('Bot is ready !');
     console.log(`Logged in as ${bot.user.tag}`);
     console.log(`ID: ${bot.user.id}`);
+});
+
+cron.schedule('0 8 * * *', () => {
+    forEach(bday_db.all(), (value) => {
+        if (value.data.jour === new Date().getDate() && value.data.mois === new Date().getMonth()+1){
+            const member = bot.guilds.cache.get(config.GUILD_ID).members.cache.get(value.key);
+            if (member){
+                const embed_bday = new MessageEmbed()
+                    .setColor('#cc532e')
+                    .setTitle('Joyeux Anniversaire ! 🎉')
+                    .setDescription(`Aujourd'hui c'est l'anniversaire de <@${member.user.id}> ! 🎈 🎂 🎊\n`)
+                    .setThumbnail('https://media3.giphy.com/media/SwIMZUJE3ZPpHAfTC4/giphy.gif?cid=ecf05e47m1z2mj0d34wxyraw7l698fcs783am4j2brokrgje&rid=giphy.gif&ct=g')
+                    .setFooter({ text: 'Pensez à lui faire sa fête bande de BG', iconURL: 'https://twemoji.maxcdn.com/v/latest/svg/1f61c.svg' })
+                bot.guilds.cache.get(config.GUILD_ID).channels.fetch(config.ANNIVERSAIRE_CHANNEL).then(channel => {
+                    channel.send({embeds:[embed_bday]});
+                });
+            }
+        }
+    });
+}, {
+    scheduled: true,
+    timezone: "Europe/Paris"
 });
 
 function lvl_up(message){

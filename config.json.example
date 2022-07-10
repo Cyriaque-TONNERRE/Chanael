@@ -13,4 +13,5 @@
   "REGLEMENT_CHANNEL": "L'id du salon où seront affiché les règles",
   "BOT_CHANNEL": "L'id du salon où seront affiché les messages du bot (lvl-up, etc)",
   "BIENVENUE_CHANNEL": "Channel où envoyer les messages de bienvenue"
+  "ANNIVERSAIRE_CHANNEL": "Channel où envoyer les messages d'anniversaire"
 }

@@ -13,10 +13,11 @@
 * affichage des warns
 * auto mute
 * system xp
+* mise en place de perm pour les commandes
+* validation de cible commande (admin, modo)
 
 ### À faire :
 * /boutique
 * économie + /give /take etc...
-* mise en place de perm pour les commandes
-* validation de cible commande (admin, modo)
 * /topxp
+* anniversaire
