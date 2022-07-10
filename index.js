@@ -12,6 +12,7 @@ const { Routes } = require('discord-api-types/v9');
 const {ApplicationCommandOptionType} = require("discord-api-types/v10");
 
 const config = require('./config.json');
+const {random, forEach, randomInt} = require("mathjs");
 
 const ticket_db = new DataBase('./ticket.json', {});
 const admin_ticket_db = new DataBase('./admin_ticket.json', {});
@@ -245,6 +246,10 @@ const commands = [
     {
         name: 'xp',
         description: 'Affiche les xp de l\'utilisateur.',
+    },
+    {
+        name: 'reload-reglement',
+        description: 'Reload la validation du règlement.',
     }
 ];
 
@@ -331,7 +336,6 @@ function fcollector2(channel, member) {
 bot.on('interactionCreate', interaction => {
     if (!interaction.isButton()) return;
     if (interaction.customId === `validate`) {
-        //interaction.member.roles.add(interaction.guild.roles.cache.find(role => role.id === config.MAIN_ROLE));
         interaction.member.setNickname(`${prenom} ${nom}`);
         interaction.guild.channels.cache.find(channel => channel.id === config.REGLEMENT_CHANNEL).permissionOverwrites.create(interaction.member.id, {
             VIEW_CHANNEL: true,
@@ -673,6 +677,28 @@ bot.on('interactionCreate', async interaction => {
         }
         interaction.reply({embeds: [sanctionEmbed]});
     }
+    if (interaction.commandName === 'reload-reglement') {
+        verificationpermission(interaction).then(result => {
+            if (result) {
+                const embed_reglement = new MessageEmbed()
+                    .setColor('#da461a')
+                    .setTitle('Acceptez le règlement de Promo 67, 5 pour accéder à l\'intégralité du serveur')
+                    .setDescription('Pour accepter le règlement du serveur veuillez interagir avec la réaction ci-dessous !\n')
+                const accep_reglement = new MessageActionRow().addComponents(
+                    new MessageButton()
+                        .setCustomId('accept_reglement')
+                        .setLabel('Accepter')
+                        .setStyle('SUCCESS'),
+                );
+                const reglement_channel = bot.channels.cache.find(channel => channel.id === config.REGLEMENT_CHANNEL);
+                reglement_channel.messages.fetch(reglement_channel.lastMessageId).then(message => {
+                    message.delete().then(() => {
+                        reglement_channel.send({embeds:[embed_reglement], components: [accep_reglement]});
+                    });
+                });
+            }
+        })
+    }
 });
 
 bot.on('interactionCreate', interaction => {
@@ -691,6 +717,31 @@ bot.on('interactionCreate', interaction => {
         } else {
             interaction.reply({content: 'Vous n\'avez pas la permission de faire cela.', ephemeral: true});
         }
+    }
+    if (interaction.customId === `accept_reglement`){
+        let has_accepted = false;
+        config.ALL_MAIN_ROLE.forEach(role => {
+            if (interaction.member.roles.cache.has(role)){
+                has_accepted = true;
+            }
+        });
+        if (!has_accepted){
+            const cir1 = interaction.guild.roles.fetch(config.MAIN_ROLE).then(role => {
+                interaction.member.roles.add(role).then(() => {
+                    const bienvenue = ["Bienvenue","Welcome","Willkommen","Bienvenidos","Bem-vindo","Witam","Dobrodošli"]
+                    const embed_bienvenue = new MessageEmbed()
+                        .setColor('#cc532e')
+                        .setTitle('Ho ! Un nouveau membre !')
+                        .setDescription(`${bienvenue[randomInt(0,7)]} sur le serveur de Promo 67,5! :beers:\n`)
+                        .setThumbnail(interaction.member.user.displayAvatarURL())
+                        .setImage('http://cyriaque.tonnerre.free.fr/welcome.png')
+                    interaction.guild.channels.fetch(config.BIENVENUE_CHANNEL).then(channel => {
+                        channel.send({content: `<@${interaction.member.user.id}>`,embeds:[embed_bienvenue]});
+                    });
+                });
+            });
+        }
+        interaction.reply({content: 'Vous avez accepté le règlement.', ephemeral: true});
     }
 });
 
@@ -718,7 +769,7 @@ function lvl_up(message){
     let name = message.guild.members.cache.find(user => user.id === message.author.id).displayName;
     const size = 100;
     console.log(xp_db.get(message.author.id));
-    if (xp >= maths.round(size*(1.3**lvl))) {
+    if (xp >= maths.round((3 * lvl + 150) * (1.05 ** lvl))) {
         let lvlupEmbed = new MessageEmbed()
             .setColor('#0162b0')
             .setTitle(`Bravo ${name} !`)
@@ -726,8 +777,7 @@ function lvl_up(message){
             .setDescription(`Vous avez atteint le niveau ${lvl+1} !`)
             .setTimestamp()
             .setFooter({ text: 'Chanael', iconURL: bot.user.displayAvatarURL()});
-        xp_db.set(message.author.id, {xp: xp - maths.round(size*(1.3**lvl)), level: lvl + 1, timestamp: Date.now()});
-        console.log("whut");
+        xp_db.set(message.author.id, {xp: xp - maths.round((3 * lvl + 150) * (1.05 ** lvl)), level: lvl + 1, timestamp: Date.now()});
         channel.send({content:`Bravo <@${message.author.id}>, tu viens de monter d'un niveau`, embeds: [lvlupEmbed]});
     }
 }

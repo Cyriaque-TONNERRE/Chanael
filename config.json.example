@@ -7,8 +7,10 @@
   "ROLE_ADMIN": "L'id du rôle admin",
   "BOT_ROLE": "L'id du rôle pour les bots",
   "MAIN_ROLE": "L'id du rôle principal qui donne acces au serveur apres le 'rename'",
+  "ALL_MAIN_ROLE": ["Les ids des rôles principaux"],
   "ONEROLE": ["role1","role2","role3"],
   "info": "il faut le nom exacte du role, sinon ça marcheras pas",
   "REGLEMENT_CHANNEL": "L'id du salon où seront affiché les règles",
-  "BOT_CHANNEL": "L'id du salon où seront affiché les messages du bot (lvl-up, etc)"
+  "BOT_CHANNEL": "L'id du salon où seront affiché les messages du bot (lvl-up, etc)",
+  "BIENVENUE_CHANNEL": "Channel où envoyer les messages de bienvenue"
 }
