@@ -1,9 +1,6 @@
-const DataBase = require('easy-json-database');
-const latex = require('node-latex');
-const fs = require('fs');
-const pdftoimage = require('node-pdftocairo')
 const maths = require('mathjs');
 const cron = require('node-cron');
+const { QuickDB } = require("quick.db");
 
 const { Client, MessageButton, MessageActionRow, MessageEmbed} = require('discord.js');
 const bot = new Client({ intents: "32767"});
@@ -15,13 +12,16 @@ const {ApplicationCommandOptionType} = require("discord-api-types/v10");
 const config = require('./config.json');
 const {randomInt, forEach} = require("mathjs");
 
-const ticket_db = new DataBase('./ticket.json', {});
-const admin_ticket_db = new DataBase('./admin_ticket.json', {});
-const onerole_db = new DataBase('./onerole.json', {});
-const sanction_db = new DataBase('./sanction.json', {});
-const nb_sanction_db = new DataBase('./nb_sanction.json', {});
-const xp_db = new DataBase('./xp.json', {});
-const bday_db = new DataBase('./bday.json', {});
+const db = new QuickDB();
+
+const ticket_db = db.table("ticket");
+const admin_ticket_db = db.table("admin_ticket");
+const onerole_db = db.table("onerole");
+const sanction_db = db.table("sanction");
+const nb_sanction_db = db.table("nb_sanction");
+const xp_db = db.table("xp");
+const money_db = db.table("money");
+const bday_db = db.table("bday");
 
 function addSanction(member, reason, modo, channel, link) {
     let sanction;
@@ -40,7 +40,6 @@ function addSanction(member, reason, modo, channel, link) {
             link: link,
         }
     }
-    console.log(member.id);
     if (!sanction_db.has(member.id)) {
         sanction_db.set(member.id,[sanction]);
     } else {
@@ -49,9 +48,10 @@ function addSanction(member, reason, modo, channel, link) {
     if (!nb_sanction_db.has(member.id)) {
         nb_sanction_db.set(member.id, 1);
     } else {
-        const nb_sanction_increase = nb_sanction_db.get(member.id) + 1;
-        console.log(nb_sanction_increase);
-        nb_sanction_db.set(member.id, nb_sanction_increase);
+        nb_sanction_db.get(member.id).then(nb_sanction => {
+            nb_sanction_db.set(member.id, nb_sanction + 1);
+        });
+
     }
     automute(member, channel);
 }
@@ -67,25 +67,24 @@ async function verificationpermission(interaction) {
 
 function automute(user, channel) {
     const member = channel.guild.members.cache.get(user.id);
-    const nb_sanction = nb_sanction_db.get(member.id);
-    if (nb_sanction >= 10) {
-        member.timeout(604800000, "Auto-Sanction");
-        channel.send(`${member.displayName} a été réduit au silence 7 jours pour avoir commis ${nb_sanction} infractions au règlement.`);
-    } else if (nb_sanction === 7) {
-        member.timeout(259200000, "Auto-Sanction");
-        channel.send(`${member.displayName} a été réduit au silence 3 jours pour avoir commis 7 infractions au règlement.`);
-    } else if (nb_sanction === 5) {
-        member.timeout(86400000, "Auto-Sanction");
-        channel.send(`${member.displayName} a été réduit au silence 1 jours pour avoir commis 5 infractions au règlement.`);
-    } else if (nb_sanction === 3) {
-        member.timeout(21600000, "Auto-Sanction");
-        channel.send(`${member.displayName} a été réduit au silence 1 heure pour avoir commis 3 infractions au règlement.`);
-    } else {
-        channel.send(`${member.displayName} a commis ${nb_sanction} infractions au règlement.`);
-    }
+    nb_sanction_db.get(member.id).then( nb_sanction => {
+        if ((nb_sanction + 1) >= 10) {
+            member.timeout(604800000, "Auto-Sanction");
+            channel.send(`${member.displayName} a été réduit au silence 7 jours pour avoir commis ${nb_sanction + 1} infractions au règlement.`);
+        } else if ((nb_sanction + 1) === 7) {
+            member.timeout(259200000, "Auto-Sanction");
+            channel.send(`${member.displayName} a été réduit au silence 3 jours pour avoir commis 7 infractions au règlement.`);
+        } else if ((nb_sanction + 1) === 5) {
+            member.timeout(86400000, "Auto-Sanction");
+            channel.send(`${member.displayName} a été réduit au silence 1 jours pour avoir commis 5 infractions au règlement.`);
+        } else if ((nb_sanction + 1) === 3) {
+            member.timeout(21600000, "Auto-Sanction");
+            channel.send(`${member.displayName} a été réduit au silence 1 heure pour avoir commis 3 infractions au règlement.`);
+        } else {
+            channel.send(`${member.displayName} a commis ${nb_sanction + 1} infractions au règlement.`);
+        }
+    });
 }
-
-
 
 const commands = [
     {
@@ -188,26 +187,7 @@ const commands = [
     {
         name: 'github',
         description: 'Ouvre le GitHub du bot.',
-    },/*
-    {
-        name: 'tex',
-        description: 'Affiche une expression écrite en LaTeX.',
-        options: [
-            {
-                name: 'option',
-                description: 'Les options latex.',
-                required: false,
-                type: ApplicationCommandOptionType.String,
-                choices:
-                   [
-                       {
-                           name: 'true',
-                           value: 'true',
-                       }
-                   ]
-            },
-        ],
-    },*/
+    },
     {
         name: 'warn',
         description: 'Ajoute un avertissement à un utilisateur.',
@@ -247,7 +227,11 @@ const commands = [
     },
     {
         name: 'xp',
-        description: 'Affiche les xp de l\'utilisateur.',
+        description: `Affiche l'xp de l\'utilisateur.`,
+    },
+    {
+        name: 'money',
+        description: 'Affiche la money de l\'utilisateur.',
     },
     {
         name: 'reload-reglement',
@@ -422,6 +406,7 @@ bot.on('interactionCreate', async interaction => {
         verificationpermission(interaction).then(result => {
             if (result) {
                 const pseudo = interaction.options.get('pseudo');
+                console.log(pseudo);
                 if (pseudo.member.roles.cache.find(role => role.id === config.ROLE_MOD) || pseudo.member.roles.cache.find(role => role.id === config.ROLE_ADMIN) || pseudo.member.permissions.has('ADMINISTRATOR')) {
                     interaction.reply({content:`Vous ne pouvez pas mute un modérateur ou un administrateur.`, ephemeral: true});
                 } else {
@@ -430,7 +415,7 @@ bot.on('interactionCreate', async interaction => {
                     const reason = interaction.options.get('raison');
                     const user = interaction.guild.members.cache.find(user => user.id === pseudo.value);
                     let timeToMute = duration.value;
-                    console.log(unite);
+                    let mute_embeds = new MessageEmbed();
                     if (unite.value === 'Minutes') {
                         timeToMute *= 60000;
                     }
@@ -446,12 +431,35 @@ bot.on('interactionCreate', async interaction => {
                     if (timeToMute > 2419200000) {
                         timeToMute = 2419200000;
                         user.timeout(timeToMute, reason.value);
-                        interaction.reply(`${user.displayName} a été mute pendant 1 mois (durée max).`);
-                        addSanction(user, reason.value, interaction.member, interaction.channel);
+                        mute_embeds
+                            .setColor('#da461a')
+                            .setTitle(`${membre.member.displayName} à été mute par ${interaction.member.displayName}`)
+                            .setThumbnail(membre.user.displayAvatarURL())
+                            .addFields({
+                                name: `Pendant :`,
+                                value: `1 Mois (durée Max)`
+                            })
+                            .setTimestamp()
+                            .setFooter({text: 'Chanael', iconURL: bot.user.displayAvatarURL()});
+                        interaction.reply({embeds: [mute_embedsçç]}).then(() => {
+                            addSanction(user, reason.value, interaction.member, interaction.channel);
+                        });
+
                     } else {
                         user.timeout(timeToMute, reason.value);
-                        interaction.reply(`${user.displayName} a été mute pendant ${duration.value} ${unite.value}.`);
-                        addSanction(user, reason.value, interaction.member, interaction.channel);
+                        mute_embeds
+                            .setColor('#da461a')
+                            .setTitle(`${membre.member.displayName} à été mute par ${interaction.member.displayName}`)
+                            .setThumbnail(membre.user.displayAvatarURL())
+                            .addFields({
+                                name: `Pendant :`,
+                                value: `${duration.value} ${unite.value}`
+                            })
+                            .setTimestamp()
+                            .setFooter({text: 'Chanael', iconURL: bot.user.displayAvatarURL()});
+                        interaction.reply(`${user.displayName} a été mute pendant ${duration.value} ${unite.value}.`).then(() => {
+                            addSanction(user, reason.value, interaction.member, interaction.channel);
+                        });
                     }
                 }
             }
@@ -461,13 +469,13 @@ bot.on('interactionCreate', async interaction => {
     if (interaction.commandName === 'ticket') {
         const user = interaction.member;
         //créer un channel dans la catégorie 899726058943815731
-        if (!ticket_db.has(user.user.id)){
+        if (!await ticket_db.has(user.user.id)){
             const channel = await interaction.guild.channels.create(`ticket-${user.displayName}`, {
                 type: 'GUILD_TEXT',
                 parent: config.TICKET_CAT,
             });
-            ticket_db.set(channel.id, user.user.id);
-            ticket_db.set(user.user.id, true);
+            await ticket_db.set(channel.id, user.user.id);
+            await ticket_db.set(user.user.id, true);
             interaction.reply({content: `Votre ticket a bien été créé.`, ephemeral: true});
             //donner la permission de lecture et d'écriture de user
             await channel.permissionOverwrites.create(interaction.user, {
@@ -494,18 +502,18 @@ bot.on('interactionCreate', async interaction => {
                     .setLabel('Fermer le ticket')
                     .setStyle('DANGER')
             );
-            channel.send({content: `Bienvenue <@${interaction.user.id}> dans votre ticket.` ,components: [row]});
+            await channel.send({content: `Bienvenue <@${interaction.user.id}> dans votre ticket.`, components: [row]});
         }else{
             interaction.reply({content: 'Vous avez déjà un ticket ouvert.', ephemeral: true});
         }
     }
 
     if (interaction.commandName === 'adminticket') {
-        verificationpermission(interaction).then(result => {
+        verificationpermission(interaction).then(async result => {
             if (result) {
                 const pseudo = interaction.options.get('pseudo');
-                if (!admin_ticket_db.has(pseudo.user.id)){
-                    const channel = interaction.guild.channels.create(`admin-ticket-${pseudo.member.displayName}`, {
+                if (!await admin_ticket_db.has(pseudo.user.id)) {
+                    interaction.guild.channels.create(`admin-ticket-${pseudo.member.displayName}`, {
                         type: 'GUILD_TEXT',
                         parent: config.TICKET_CAT,
                     }).then(channel => {
@@ -536,10 +544,13 @@ bot.on('interactionCreate', async interaction => {
                                 .setLabel('Fermer le ticket')
                                 .setStyle('DANGER')
                         );
-                        channel.send({content: `Bienvenue <@${pseudo.user.id}> dans le ticket de <@${interaction.user.id}>.` ,components: [row]});
+                        channel.send({
+                            content: `Bienvenue <@${pseudo.user.id}> dans le ticket de <@${interaction.user.id}>.`,
+                            components: [row]
+                        });
 
                     });
-                }else{
+                } else {
                     interaction.reply({content: 'Vous avez déjà un admin-ticket ouvert.', ephemeral: true});
                 }
             }
@@ -551,23 +562,31 @@ bot.on('interactionCreate', async interaction => {
             if (result) {
                 const pseudo = interaction.options.get('pseudo');
                 const role = interaction.options.get('role');
-                const user = interaction.guild.members.cache.find(user => user.id === pseudo.value);
+                const member = interaction.guild.members.cache.find(user => user.id === pseudo.value);
                 const role_to_add = interaction.guild.roles.cache.find(AddRole => AddRole.name === role.value);
-                let target;
-                // supprimer le role à tous ceux qui ont le role
-                if (onerole_db.has(role.value)) {
-                    target = interaction.guild.members.cache.find(user => user.id === onerole_db.get(role.value));
-                    target.roles.remove(role_to_add);
-                    onerole_db.set(role.value, user.user.id);
-                    user.roles.add(role_to_add);
+                let member_target;
+                if (!onerole_db.has(role.value)) {
+                    onerole_db.set(role.value, member.user.id).then(() => {
+                        member.roles.add(role_to_add).then(() => {
+                            interaction.reply({content: `Le role ${role.value} a bien été attribué à ${member.displayName}.`, ephemeral: true});
+                        });
+                    });
                 } else {
-                    onerole_db.set(role.value, user.user.id);
-                    user.roles.add(role_to_add);
+                    onerole_db.get(role.value).then(target => {
+                        member_target = interaction.guild.members.cache.find(user => user.id === target);
+                        member_target.roles.remove(role_to_add);
+                        onerole_db.set(role.value, member.user.id).then(() => {
+                            member.roles.add(role_to_add).then(() => {
+                                interaction.reply({content: `Le role ${role.value} a bien été attribué à ${member.displayName}.`, ephemeral: true});
+                            });
+                        });
+                    })
                 }
-                interaction.reply({content: `Le role ${role.value} a bien été attribué à ${user.displayName}.`, ephemeral: true});
+
             }
         })
     }
+
     if (interaction.commandName === 'github') {
         //bouton pour ouvrir le lien github
         const GithubLink = new MessageActionRow().addComponents(
@@ -578,61 +597,12 @@ bot.on('interactionCreate', async interaction => {
         );
         interaction.reply({content: `Ci-dessous le github du bot, n'hésitez pas si vous trouvez des erreurs et/ou si vous voulez proposer des fonctionnalités **utiles**.`,components: [GithubLink], ephemeral: true});
     }
-    function convertToPng() {
-        const options = {
-            format: 'png',
-            resolution: '600',
-            transparent: true,
-            originPageSizes: true,
-        };
-        console.log('problème ici');
-        pdftoimage.input('tex/output.pdf', options).output('tex/output')
-    }
-
-    const filtre = m => m.author.id === interaction.user.id;
-    if (interaction.commandName === 'tex') {
-        const option = interaction.options.get('option');
-        if (option !== null) {
-            interaction.channel.send(`\`\`\`latex` +
-                `\\documentclass[varwidth=true, border=1pt, convert={size=640x}]{standalone}` +
-                `\\usepackage[utf8]{inputenc}`+
-                `\\usepackage{amsfonts}` +
-                `\\begin{document}` +
-                `$VOTRE CODE LaTeX ICI$` +
-                `\\end{document}\`\`\``);
-        } else {
-            interaction.reply({content: `Vous pouvez envoyer ci-dessous votre code LaTeX.`, ephemeral: true});
-            let okstring;
-            const tcollector = interaction.channel.createMessageCollector({filter: filtre, max: 1, time: 60000});
-            tcollector.on('collect', (message) => {
-                okstring = message.content.replace(/\\/g, '\\\\');
-                message.delete();
-            })
-            tcollector.on('end', (collected) => {
-                if(collected.size === 0){
-                    interaction.editReply({content: `Commande annulée, vous n'avez pas envoyé de code LaTeX.`, ephemeral: true});
-                } else {
-                    const input = `\\documentclass[varwidth=true, border=1pt, convert={size=640x}]{standalone}` +
-                        `\\usepackage[utf8]{inputenc}` +
-                        `\\usepackage{amsfonts}` +
-                        `\\begin{document}` +
-                        `$${okstring}$` +
-                        `\\end{document}`;
-                    const output = fs.createWriteStream('tex/output.pdf')
-                    const pdf = latex(input)
-                    pdf.pipe(output)
-                    pdf.on('error', err => interaction.editReply(err));
-                    pdf.on('finish', () => convertToPng());
-                }
-            });
-        }
-    }
     if (interaction.commandName === 'warn') {
         verificationpermission(interaction).then(result => {
             if (result) {
                 const membre = interaction.options.get('pseudo');
                 if (membre.member.roles.cache.find(role => role.id === config.ROLE_MOD) || membre.member.roles.cache.find(role => role.id === config.ROLE_ADMIN) || membre.member.permissions.has('ADMINISTRATOR')) {
-                    interaction.reply({content:`Vous ne pouvez pas mute un modérateur ou un administrateur.`, ephemeral: true});
+                    interaction.reply({content:`Vous ne pouvez pas warn----------- un modérateur ou un administrateur.`, ephemeral: true});
                 } else {
                     const reason = interaction.options.get('raison');
                     const link = interaction.options.get('link');
@@ -657,7 +627,6 @@ bot.on('interactionCreate', async interaction => {
         })
     }
     if (interaction.commandName === 'historique') {
-
         function timestampToDate (timestamp) {
             const date = new Date(timestamp);
             const day = date.getDate();
@@ -671,7 +640,7 @@ bot.on('interactionCreate', async interaction => {
 
         const membre = interaction.options.get('pseudo');
         let sanctionEmbed;
-        if (nb_sanction_db.get(membre.user.id) === undefined){
+        if (await nb_sanction_db.get(membre.user.id) === undefined){
             sanctionEmbed = new MessageEmbed()
                 .setColor('#3dd583')
                 .setTitle(`Sanctions de ${membre.member.displayName}`)
@@ -723,7 +692,7 @@ bot.on('interactionCreate', async interaction => {
         })
     }
     if (interaction.commandName === 'setanniv') {
-        if (bday_db.has(interaction.member.id)) {
+        if (await bday_db.has(interaction.member.id)) {
             interaction.reply({content: `Votre anniversaire est deja régler, si il y a un problème ➡️  contactez un modérateur.`, ephemeral: true});
         } else {
             const jour = interaction.options.get('jour');
@@ -731,49 +700,120 @@ bot.on('interactionCreate', async interaction => {
                 interaction.reply({content: `Veuillez entrer un jour valide (1-31).`, ephemeral: true});
             } else {
                 const mois = interaction.options.get('mois');
-                bday_db.set(interaction.member.id, {jour: jour.value, mois: mois.value});
+                await bday_db.set(interaction.member.id, {jour: jour.value, mois: mois.value});
                 interaction.reply({content: `Votre anniversaire a bien été régler.`, ephemeral: true});
             }
         }
     }
+    if (interaction.commandName === 'xp') {
+        const membre = interaction.member;
+        const xp_embed = new MessageEmbed()
+        if (await xp_db.has(membre.user.id)) {
+            const lvl = xp_db.get(membre.user.id).level;
+            const xp = xp_db.get(membre.user.id).xp;
+            xp_embed
+                .setColor('#3dd583')
+                .setTitle(`XP de ${membre.displayName}`)
+                .setThumbnail(membre.user.displayAvatarURL())
+                .addFields({
+                        name: `**Niveau :**`,
+                        value: `${lvl}`,
+                        inline: true
+                    },
+                    {
+                        name: `**XP :**`,
+                        value: `${xp} / ${maths.round((3 * lvl + 150) * (1.05 ** lvl))}`,
+                        inline: true
+                    })
+                .setTimestamp()
+        }
+        else {
+            xp_embed
+                .setColor('#3dd583')
+                .setTitle(`XP de ${membre.displayName}`)
+                .setThumbnail(membre.user.displayAvatarURL())
+                .addFields({
+                        name: `**Niveau :**`,
+                        value: `0`,
+                        inline: true
+                    },
+                    {
+                        name: `**XP :**`,
+                        value: `0 / 150`,
+                        inline: true
+                    })
+                .setTimestamp()
+        }
+        interaction.reply({embeds: [xp_embed]});
+    }
+    if (interaction.commandName === 'money') {
+        const membre = interaction.member;
+        const money_embed = new MessageEmbed()
+        if (await money_db.has(membre.user.id)) {
+            const money = money_db.get(membre.user.id);
+            money_embed
+                .setColor('#d5d03d')
+                .setTitle(`Money de ${membre.displayName}`)
+                .setThumbnail(membre.user.displayAvatarURL())
+                .addFields({
+                        name: `**Money :**`,
+                        value: `${money}`,
+                        inline: true
+                    })
+                .setTimestamp()
+        }
+        else {
+            money_embed
+                .setColor('#d5d03d')
+                .setTitle(`Money de ${membre.displayName}`)
+                .setThumbnail(membre.user.displayAvatarURL())
+                .addFields({
+                    name: `**Money :**`,
+                    value: `0`,
+                    inline: true
+                })
+                .setTimestamp()
+        }
+        interaction.reply({embeds: [money_embed]});
+    }
 });
 
-bot.on('interactionCreate', interaction => {
+bot.on('interactionCreate', async interaction => {
     if (!interaction.isButton()) return;
-    if (interaction.customId === `end_ticket`){
-        if(interaction.member.roles.cache.some((role) => role.id === config.ROLE_MOD) || interaction.member.permissions.has("ADMINISTRATOR")){
+    if (interaction.customId === `end_ticket`) {
+        if (interaction.member.roles.cache.some((role) => role.id === config.ROLE_MOD) || interaction.member.permissions.has("ADMINISTRATOR")) {
             interaction.channel.delete();
-            if (ticket_db.has(interaction.channel.id)){
-                ticket_db.delete(ticket_db.get(interaction.channel.id));
-                ticket_db.delete(interaction.channel.id);
+            if (await ticket_db.has(interaction.channel.id)) {
+                await ticket_db.delete(await ticket_db.get(interaction.channel.id));
+                await ticket_db.delete(interaction.channel.id);
             }
-            if (admin_ticket_db.has(interaction.channel.id)){
-                admin_ticket_db.delete(admin_ticket_db.get(interaction.channel.id));
-                admin_ticket_db.delete(interaction.channel.id);
+            if (await admin_ticket_db.has(interaction.channel.id)) {
+                await admin_ticket_db.delete(await admin_ticket_db.get(interaction.channel.id));
+                await admin_ticket_db.delete(interaction.channel.id);
             }
         } else {
             interaction.reply({content: 'Vous n\'avez pas la permission de faire cela.', ephemeral: true});
         }
     }
-    if (interaction.customId === `accept_reglement`){
+    if (interaction.customId === `accept_reglement`) {
         let has_accepted = false;
         config.ALL_MAIN_ROLE.forEach(role => {
-            if (interaction.member.roles.cache.has(role)){
+            if (interaction.member.roles.cache.has(role)) {
                 has_accepted = true;
             }
         });
-        if (!has_accepted){
-            const cir1 = interaction.guild.roles.fetch(config.MAIN_ROLE).then(role => {
+        if (!has_accepted) {
+            interaction.guild.roles.fetch(config.MAIN_ROLE).then(role => {
                 interaction.member.roles.add(role).then(() => {
-                    const bienvenue = ["Bienvenue","Welcome","Willkommen","Bienvenidos","Bem-vindo","Witam","Dobrodošli"]
+                    const bienvenue = ["Bienvenue", "Welcome", "Willkommen", "Bienvenidos", "Bem-vindo", "Witam", "Dobrodošli"]
                     const embed_bienvenue = new MessageEmbed()
                         .setColor('#cc532e')
                         .setTitle('Ho ! Un nouveau membre !')
-                        .setDescription(`${bienvenue[randomInt(0,7)]} sur le serveur de Promo 67,5! :beers:\n`)
+                        .setDescription(`${bienvenue[randomInt(0, 7)]} sur le serveur de Promo 67,5! :beers:\n`)
                         .setThumbnail(interaction.member.user.displayAvatarURL())
                         .setImage('http://cyriaque.tonnerre.free.fr/welcome.png')
                     interaction.guild.channels.fetch(config.BIENVENUE_CHANNEL).then(channel => {
-                        channel.send({content: `<@${interaction.member.user.id}>`,embeds:[embed_bienvenue]});
+                        channel.send({content: `<@${interaction.member.user.id}>`, embeds: [embed_bienvenue]});
                     });
                 });
             });
@@ -782,14 +822,14 @@ bot.on('interactionCreate', interaction => {
     }
 });
 
-bot.on('channelDelete', channel => {
-    if (ticket_db.has(channel.id)) {
-        ticket_db.delete(ticket_db.get(channel.id));
-        ticket_db.delete(channel.id);
+bot.on('channelDelete', async channel => {
+    if (await ticket_db.has(channel.id)) {
+        await ticket_db.delete(await ticket_db.get(channel.id));
+        await ticket_db.delete(channel.id);
     }
-    if (admin_ticket_db.has(channel.id)) {
-        admin_ticket_db.delete(admin_ticket_db.get(channel.id));
-        admin_ticket_db.delete(channel.id);
+    if (await admin_ticket_db.has(channel.id)) {
+        await admin_ticket_db.delete(await admin_ticket_db.get(channel.id));
+        await admin_ticket_db.delete(channel.id);
     }
 })
 
@@ -797,18 +837,29 @@ bot.on('ready', () => {
     console.log('Bot is ready !');
     console.log(`Logged in as ${bot.user.tag}`);
     console.log(`ID: ${bot.user.id}`);
+    /*
+    if (!xp_db.has('nb_user')){
+        xp_db.set('nb_user', 0);
+        xp_db.set('order_user', []);
+    }
+    if (!money_db.has('nb_user')){
+        money_db.set('nb_user', 0);
+        money_db.set('order_user', []);
+    }
+    */
 });
 
-cron.schedule('0 8 * * *', () => {
+cron.schedule('13 20 * * *', () => {
     forEach(bday_db.all(), (value) => {
         if (value.data.jour === new Date().getDate() && value.data.mois === new Date().getMonth()+1){
+            const bdaygif = ["https://media3.giphy.com/media/SwIMZUJE3ZPpHAfTC4/giphy.gif","https://tenor.com/Y8iY.gif","https://tenor.com/bBJpT.gif","https://tenor.com/bRZjc.gif","https://tenor.com/bNoxv.gif","https://tenor.com/bdecb.gif","https://i.pinimg.com/originals/11/68/82/116882088dc7f44d5cc3d3377f963c70.gif","https://thumbs.gfycat.com/RepentantUnpleasantFantail-size_restricted.gif","https://imgur.com/34YQYmg","https://media.giphy.com/media/oXpZ1sLkbCZ9jFhBMx/giphy.gif","https://hurfat.com/wp-content/uploads/2021/07/Happy-Birthday...-22.gif","https://i.pinimg.com/originals/28/35/2f/28352f4f85ebb3ff4019c0b4a2dd0092.gif",""];
             const member = bot.guilds.cache.get(config.GUILD_ID).members.cache.get(value.key);
             if (member){
                 const embed_bday = new MessageEmbed()
                     .setColor('#cc532e')
                     .setTitle('Joyeux Anniversaire ! 🎉')
                     .setDescription(`Aujourd'hui c'est l'anniversaire de <@${member.user.id}> ! 🎈 🎂 🎊\n`)
-                    .setThumbnail('https://media3.giphy.com/media/SwIMZUJE3ZPpHAfTC4/giphy.gif?cid=ecf05e47m1z2mj0d34wxyraw7l698fcs783am4j2brokrgje&rid=giphy.gif&ct=g')
+                    .setThumbnail(bdaygif[randomInt(0,16)])
                     .setFooter({ text: 'Pensez à lui faire sa fête bande de BG', iconURL: 'https://twemoji.maxcdn.com/v/latest/svg/1f61c.svg' })
                 bot.guilds.cache.get(config.GUILD_ID).channels.fetch(config.ANNIVERSAIRE_CHANNEL).then(channel => {
                     channel.send({embeds:[embed_bday]});
@@ -821,13 +872,17 @@ cron.schedule('0 8 * * *', () => {
     timezone: "Europe/Paris"
 });
 
+bot.on('guildMemberRemove', member => {
+    if (bday_db.has(member.id)){
+        bday_db.delete(member.id);
+    }
+});
+
 function lvl_up(message){
     let xp = xp_db.get(message.author.id).xp;
     let lvl = xp_db.get(message.author.id).level;
     let channel = message.guild.channels.cache.find(channel => channel.id === config.BOT_CHANNEL);
-    let name = message.guild.members.cache.find(user => user.id === message.author.id).displayName;
-    const size = 100;
-    console.log(xp_db.get(message.author.id));
+    let name = message.guild.members.cache.find(user => user.id === message.author.id).displayName
     if (xp >= maths.round((3 * lvl + 150) * (1.05 ** lvl))) {
         let lvlupEmbed = new MessageEmbed()
             .setColor('#0162b0')
@@ -840,7 +895,7 @@ function lvl_up(message){
         channel.send({content:`Bravo <@${message.author.id}>, tu viens de monter d'un niveau`, embeds: [lvlupEmbed]});
     }
 }
-/*
+
 bot.on('messageCreate', (message) => {
     if (message.author.id !== bot.user.id) {
         if (!xp_db.has(message.author.id)){
@@ -857,6 +912,6 @@ bot.on('messageCreate', (message) => {
         }
     }
 });
-*/
+
 
 bot.login(config.BOT_TOKEN);
