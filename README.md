@@ -21,3 +21,6 @@
 * économie + /give /take etc...
 * /topxp
 * anniversaire
+
+# Modifié pour https://github.com/Cyriaque-TONNERRE/Chanael-V2
+## Passage à la V14 DiscordJS + Nouvelle Architecture
